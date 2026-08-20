@@ -1,0 +1,16 @@
+---
+# CCGC 5502 Automation Project - master playbook
+#
+# Runs every role against all Linux inventory nodes. Invoked automatically by
+# the Terraform null_resource provisioner once the VMs are up.
+
+- name: Configure all Linux nodes
+  hosts: linux
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: profile-5877
+    - role: user-5877
+    - role: datadisk-5877
+    - role: webserver-5877

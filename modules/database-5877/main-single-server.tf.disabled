@@ -1,0 +1,36 @@
+# Azure Database for PostgreSQL - Single Server, as the assignment specifies.
+# Cheapest available tier: Basic, Gen5, 1 vCore, 5 GB storage.
+#
+# NOTE: Single Server is on Azure's retirement path. If provisioning fails with
+# a "NoRegisteredProviderFound" or similar error, swap this file for
+# main-flexible.tf.disabled, which provisions the Flexible Server equivalent.
+
+locals {
+  # Azure rejects names that start with a digit; "5877" does. This keeps the
+  # ID digits while satisfying the "must start with a letter" rule.
+  alpha_prefix = "n${var.prefix}"
+  sku_name     = "B_Gen5_1"
+  pg_version   = "11"
+  storage_mb   = 5120
+}
+
+resource "azurerm_postgresql_server" "db" {
+  name                = lower("${local.alpha_prefix}-psql-server")
+  location            = var.location
+  resource_group_name = var.rg_name
+  tags                = var.tags
+
+  administrator_login          = var.admin_username
+  administrator_login_password = var.admin_password
+
+  sku_name   = local.sku_name
+  version    = local.pg_version
+  storage_mb = local.storage_mb
+
+  backup_retention_days        = 7
+  geo_redundant_backup_enabled = false
+  auto_grow_enabled            = false
+
+  ssl_enforcement_enabled       = true
+  public_network_access_enabled = true
+}

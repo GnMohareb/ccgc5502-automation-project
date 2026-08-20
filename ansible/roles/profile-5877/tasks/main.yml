@@ -1,0 +1,17 @@
+---
+# Appends the required two-line test block to the system-wide profile file.
+# blockinfile is used rather than two separate lineinfile tasks so the change is
+# idempotent and clearly delimited. `tail -4 /etc/profile` then shows the begin
+# marker, both required lines, and the end marker.
+
+- name: Append the test block to the system-wide profile
+  ansible.builtin.blockinfile:
+    path: /etc/profile
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - profile-5877"
+    block: |
+      #Test block added by Ansible......{{ profile_owner }}
+      export TMOUT={{ profile_tmout }}
+    owner: root
+    group: root
+    mode: "0644"
+  become: true

@@ -1,0 +1,27 @@
+---
+# Supplementary group created for the new accounts.
+user_admin_group: cloudadmins
+
+# Accounts to create. Iterated with a loop.
+user_accounts:
+  - user100
+  - user200
+  - user300
+
+# Every account joins these groups.
+user_extra_groups:
+  - cloudadmins
+  - wheel
+
+# Key type and size generated for each account.
+#
+# 2048 is ssh-keygen's own default and is generated in about a second. 4096 was
+# tried first and took minutes per key on a 1 vCPU VM - nine keys across three
+# nodes stalled the whole provisioning run.
+user_ssh_key_type: rsa
+user_ssh_key_bits: 2048
+
+# The account whose private key is fetched back to the control node, and the
+# directory on the control node it is written to.
+user_key_to_fetch: user100
+user_key_fetch_dest: "{{ playbook_dir }}/fetched_keys"

@@ -1,0 +1,82 @@
+---
+# Partitions the attached 10 GB data disk into a 4 GB XFS filesystem mounted on
+# /part1 and a 5 GB EXT4 filesystem mounted on /part2, both persistent.
+#
+# The device is discovered at run time rather than hardcoded. The VM sizes
+# available on this subscription are NVMe-only, so the data disk appears as
+# /dev/nvme0n2 rather than the /dev/sdc it would be on a SCSI VM size. Detecting
+# it keeps the role working on either.
+
+- name: Install filesystem tools
+  ansible.builtin.package:
+    name:
+      - parted
+      - xfsprogs
+      - e2fsprogs
+    state: present
+  become: true
+
+# Matched on size alone, deliberately. An earlier version also required the
+# disk to have no partitions, which made the role fail on every re-run once it
+# had done its job - fatal here, because the Terraform provisioner re-runs this
+# playbook on each apply. The OS disk is a different size, so size is enough to
+# identify the data disk whether or not it is already partitioned.
+- name: Identify the data disk
+  ansible.builtin.set_fact:
+    datadisk_device: "{{ item.key }}"
+  loop: "{{ ansible_devices | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - item.value.size is search(datadisk_size_match)
+    - not item.key.startswith('loop')
+    - not item.key.startswith('sr')
+    - not item.key.startswith('dm-')
+  become: true
+
+- name: Fail early if no data disk was found
+  ansible.builtin.fail:
+    msg: >-
+      No {{ datadisk_size_match }} data disk found on {{ inventory_hostname }}.
+      Available devices: {{ ansible_devices.keys() | list }}
+  when: datadisk_device is not defined
+
+# NVMe partitions are named nvme0n2p1, SCSI partitions are named sdc1.
+- name: Work out the partition device prefix
+  ansible.builtin.set_fact:
+    datadisk_part_prefix: >-
+      /dev/{{ datadisk_device }}{{ 'p' if 'nvme' in datadisk_device else '' }}
+
+- name: Create the partitions
+  community.general.parted:
+    device: "/dev/{{ datadisk_device }}"
+    label: gpt
+    number: "{{ item.number }}"
+    part_start: "{{ '0%' if item.number == 1 else datadisk_partitions[item.number - 2].end }}"
+    part_end: "{{ item.end }}"
+    state: present
+  loop: "{{ datadisk_partitions }}"
+  loop_control:
+    label: "partition {{ item.number }} -> {{ item.mount }}"
+  become: true
+
+- name: Create the filesystems
+  community.general.filesystem:
+    dev: "{{ datadisk_part_prefix | trim }}{{ item.number }}"
+    fstype: "{{ item.fstype }}"
+  loop: "{{ datadisk_partitions }}"
+  loop_control:
+    label: "{{ item.fstype }} on partition {{ item.number }}"
+  become: true
+
+- name: Create the mount points and mount persistently
+  ansible.posix.mount:
+    path: "{{ item.mount }}"
+    src: "{{ datadisk_part_prefix | trim }}{{ item.number }}"
+    fstype: "{{ item.fstype }}"
+    opts: "{{ datadisk_mount_opts }}"
+    state: mounted
+  loop: "{{ datadisk_partitions }}"
+  loop_control:
+    label: "{{ item.mount }}"
+  become: true

@@ -1,0 +1,10 @@
+---
+# The project requires Apache to be started through a handler, so it only
+# restarts when the served content actually changed.
+
+- name: Start Apache
+  ansible.builtin.service:
+    name: "{{ webserver_service }}"
+    state: restarted
+    enabled: true
+  become: true

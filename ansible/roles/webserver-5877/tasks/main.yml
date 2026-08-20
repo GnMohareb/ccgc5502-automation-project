@@ -1,0 +1,71 @@
+---
+# Installs Apache, generates one HTML page per node ON THE CONTROL NODE named
+# vm1.html / vm2.html / vm3.html, copies each to its own node as index.html with
+# 0444 permissions, and starts Apache through a handler.
+#
+# node_index is derived from the position of the host in the linux group, so
+# the first node gets vm1.html, the second vm2.html and so on.
+
+- name: Work out this node position in the linux group
+  ansible.builtin.set_fact:
+    node_index: "{{ groups['linux'].index(inventory_hostname) + 1 }}"
+
+- name: Install Apache
+  ansible.builtin.package:
+    name: "{{ webserver_package }}"
+    state: present
+  become: true
+
+- name: Ensure the staging directory exists on the control node
+  ansible.builtin.file:
+    path: "{{ webserver_staging_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+# Step b - the page is written on the automation server first, named after the
+# node it belongs to, and carries that node fully qualified domain name.
+- name: Generate vm{{ node_index }}.html on the control node
+  ansible.builtin.copy:
+    dest: "{{ webserver_staging_dir }}/vm{{ node_index }}.html"
+    mode: "0644"
+    content: |
+      <!doctype html>
+      <html lang="en">
+        <head><meta charset="utf-8"><title>{{ node_fqdn | default(ansible_fqdn) }}</title></head>
+        <body>
+          <h1>{{ node_fqdn | default(ansible_fqdn) }}</h1>
+          <p>Served by node vm{{ node_index }} behind the load balancer.</p>
+        </body>
+      </html>
+  delegate_to: localhost
+  become: false
+
+# Step c and d - copied out as index.html with the required permissions.
+- name: Copy the page to the node as index.html
+  ansible.builtin.copy:
+    src: "{{ webserver_staging_dir }}/vm{{ node_index }}.html"
+    dest: "{{ webserver_docroot }}/{{ webserver_index }}"
+    owner: root
+    group: root
+    mode: "{{ webserver_file_mode }}"
+  become: true
+  notify: Start Apache
+
+- name: Open the web port in firewalld
+  ansible.posix.firewalld:
+    port: "{{ webserver_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+  become: true
+  failed_when: false
+
+# Step f - enabled so it survives a reboot. Step e is handled by the handler.
+- name: Ensure Apache starts on subsequent reboots
+  ansible.builtin.service:
+    name: "{{ webserver_service }}"
+    enabled: true
+  become: true

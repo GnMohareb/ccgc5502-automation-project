@@ -1,0 +1,77 @@
+---
+# Creates the cloudadmins group and three user accounts, puts each account in
+# the cloudadmins and wheel groups, generates a passphrase-less SSH key pair for
+# each, authorises each key for its own account, and fetches user100's private
+# key from the first Linux node back to the control node.
+
+- name: Create the administrative group
+  ansible.builtin.group:
+    name: "{{ user_admin_group }}"
+    state: present
+  become: true
+
+- name: Create the user accounts and generate a passphrase-less SSH key for each
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: "{{ user_extra_groups }}"
+    append: true
+    shell: /bin/bash
+    create_home: true
+    generate_ssh_key: true
+    ssh_key_type: "{{ user_ssh_key_type }}"
+    ssh_key_bits: "{{ user_ssh_key_bits }}"
+    ssh_key_file: .ssh/id_rsa
+    # ssh_key_passphrase is deliberately NOT set. Supplying it - even as an
+    # empty string - makes the user module drop the -N flag from ssh-keygen,
+    # which then blocks forever on an interactive "Enter passphrase:" prompt.
+    # Omitting it makes the module pass -N "" and the key is created with no
+    # passphrase, which is what the project requires.
+    state: present
+  loop: "{{ user_accounts }}"
+  become: true
+
+- name: Read the public key generated for each account
+  ansible.builtin.slurp:
+    src: "/home/{{ item }}/.ssh/id_rsa.pub"
+  register: user_pubkeys
+  loop: "{{ user_accounts }}"
+  become: true
+
+# Authorising each account against its own generated key is what allows the
+# fetched private key to log straight in.
+- name: Authorise each generated public key for its own account
+  ansible.posix.authorized_key:
+    user: "{{ item.item }}"
+    key: "{{ item.content | b64decode }}"
+    state: present
+    manage_dir: true
+  loop: "{{ user_pubkeys.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true
+
+- name: Ensure the local directory for the fetched key exists
+  ansible.builtin.file:
+    path: "{{ user_key_fetch_dest }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+# Only VM1 - the first host in the linux group - hands its key back.
+- name: Fetch the private key from the first Linux node
+  ansible.builtin.fetch:
+    src: "/home/{{ user_key_to_fetch }}/.ssh/id_rsa"
+    dest: "{{ user_key_fetch_dest }}/{{ user_key_to_fetch }}_id_rsa"
+    flat: true
+  become: true
+  when: inventory_hostname == groups['linux'][0]
+
+- name: Tighten permissions on the fetched private key
+  ansible.builtin.file:
+    path: "{{ user_key_fetch_dest }}/{{ user_key_to_fetch }}_id_rsa"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  when: inventory_hostname == groups['linux'][0]

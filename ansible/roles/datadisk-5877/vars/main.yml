@@ -1,0 +1,18 @@
+---
+# Size string used to recognise the attached data disk in ansible_devices.
+# The Terraform data disk module provisions 10 GB disks.
+datadisk_size_match: "10.00 GB"
+
+# Partition layout. Sizes are passed straight to parted.
+datadisk_partitions:
+  - number: 1
+    end: "4GiB"
+    fstype: xfs
+    mount: /part1
+  - number: 2
+    end: "9GiB"
+    fstype: ext4
+    mount: /part2
+
+# Mount options written to /etc/fstab.
+datadisk_mount_opts: defaults,nofail

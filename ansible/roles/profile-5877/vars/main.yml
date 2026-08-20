@@ -1,0 +1,6 @@
+---
+# Username stamped into the /etc/profile test block.
+profile_owner: n01275877
+
+# Shell idle timeout in seconds.
+profile_tmout: 1500

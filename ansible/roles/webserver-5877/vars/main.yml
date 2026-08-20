@@ -1,0 +1,18 @@
+---
+# Apache package and service names. Rocky Linux uses httpd.
+webserver_package: httpd
+webserver_service: httpd
+
+# Document root and the file served from it.
+webserver_docroot: /var/www/html
+webserver_index: index.html
+
+# Permissions required on the served file.
+webserver_file_mode: "0444"
+
+# Directory ON THE CONTROL NODE where vm1.html, vm2.html and vm3.html are
+# generated before being copied out to their respective nodes.
+webserver_staging_dir: "{{ playbook_dir }}/generated_pages"
+
+# Port opened in firewalld.
+webserver_port: 80
